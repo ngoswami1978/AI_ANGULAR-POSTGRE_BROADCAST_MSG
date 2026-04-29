@@ -1,35 +1,25 @@
-# AI Angular + PostgreSQL Broadcast Message
+# AI Angular Broadcast Message (Angular-only)
 
-A minimal full-stack app for real-time broadcast messaging with message persistence.
+A minimal Angular app that handles broadcast messaging without a separate backend service.
 
 ## Stack
-- **Frontend**: Angular standalone app (`frontend/`)
-- **Backend**: Node.js + Express + WebSocket (`backend/`)
-- **Database**: PostgreSQL (`docker-compose.yml`)
+- **Frontend + Backend logic**: Angular standalone app (`frontend/`)
+- **Persistence**: Browser `localStorage`
+- **Real-time cross-tab broadcast**: Browser `BroadcastChannel`
 
 ## Features
-- Real-time message broadcast over WebSocket (`/ws`)
-- REST API for listing and creating messages (`GET /messages`, `POST /messages`)
-- Automatic message persistence in PostgreSQL
-- Basic connection/error handling in the Angular UI
+- Send and list messages in the Angular app
+- Broadcast new messages across open browser tabs
+- Persist up to 100 recent messages in local storage
+- No Node/Express backend required
 
 ## Quick start
-1. Start PostgreSQL:
-   ```bash
-   docker compose up -d postgres
-   ```
-2. Start backend:
-   ```bash
-   cd backend
-   cp .env.example .env
-   npm install
-   npm run dev
-   ```
-3. Start frontend:
+1. Start the Angular app:
    ```bash
    cd frontend
    npm install
    npm start
    ```
+2. Open `http://localhost:4200` in one or more tabs.
 
-Backend runs at `http://localhost:3000`; frontend runs at `http://localhost:4200` (Vite default).
+> The previous `backend/` service is no longer required for running the app.
