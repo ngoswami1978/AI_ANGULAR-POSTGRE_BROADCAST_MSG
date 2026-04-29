@@ -3,11 +3,7 @@ import { Component, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 type Message = { id: number; content: string; created_at: string };
-
-type EventMessage =
-  | { type: 'connected' }
-  | { type: 'message'; data: Message }
-  | { type: 'error'; message: string };
+type EventMessage = { type: 'message'; data: Message };
 
 @Component({
   selector: 'app-root',
@@ -16,7 +12,7 @@ type EventMessage =
   template: `
     <main style="max-width: 760px; margin: 2rem auto; font-family: Arial, sans-serif;">
       <h1>Broadcast Messages</h1>
-      <p style="color:#666">Connection: {{ connected ? 'online' : 'offline' }}</p>
+      <p style="color:#666">Mode: Angular-only backend (in-browser)</p>
 
       <form (ngSubmit)="send()" style="display:flex; gap:.5rem; margin-bottom:1rem;">
         <input [(ngModel)]="draft" name="draft" placeholder="Type message" style="flex:1; padding:.5rem;" />
@@ -37,48 +33,28 @@ type EventMessage =
 export class AppComponent implements OnDestroy {
   draft = '';
   sending = false;
-  connected = false;
   error = '';
   messages: Message[] = [];
-  private socket: WebSocket;
+
+  private readonly storageKey = 'angular_backend_messages';
+  private readonly channel = new BroadcastChannel('angular_backend_channel');
 
   constructor() {
-    this.socket = new WebSocket('ws://localhost:3000/ws');
+    this.messages = this.loadMessages();
 
-    fetch('http://localhost:3000/messages')
-      .then((res) => res.json())
-      .then((rows: Message[]) => {
-        this.messages = rows;
-      })
-      .catch(() => {
-        this.error = 'Could not load messages from backend.';
-      });
-
-    this.socket.onopen = () => {
-      this.connected = true;
-      this.error = '';
-    };
-
-    this.socket.onclose = () => {
-      this.connected = false;
-    };
-
-    this.socket.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as EventMessage;
-      if (payload.type === 'message') {
-        this.messages = [payload.data, ...this.messages];
-      }
-      if (payload.type === 'error') {
-        this.error = payload.message;
+    this.channel.onmessage = (event: MessageEvent<EventMessage>) => {
+      const payload = event.data;
+      if (payload?.type === 'message') {
+        this.messages = [payload.data, ...this.messages.filter((m) => m.id !== payload.data.id)];
       }
     };
   }
 
   ngOnDestroy(): void {
-    this.socket.close();
+    this.channel.close();
   }
 
-  async send(): Promise<void> {
+  send(): void {
     const content = this.draft.trim();
     if (!content) return;
 
@@ -86,15 +62,10 @@ export class AppComponent implements OnDestroy {
     this.error = '';
 
     try {
-      if (this.connected) {
-        this.socket.send(JSON.stringify({ content }));
-      } else {
-        await fetch('http://localhost:3000/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
-        });
-      }
+      const next = this.createMessage(content);
+      this.messages = [next, ...this.messages];
+      this.persistMessages(this.messages);
+      this.channel.postMessage({ type: 'message', data: next } satisfies EventMessage);
       this.draft = '';
     } catch {
       this.error = 'Message was not sent.';
@@ -105,5 +76,29 @@ export class AppComponent implements OnDestroy {
 
   formatDate(date: string): string {
     return new Date(date).toLocaleString();
+  }
+
+  private loadMessages(): Message[] {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as Message[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private persistMessages(messages: Message[]): void {
+    localStorage.setItem(this.storageKey, JSON.stringify(messages.slice(0, 100)));
+  }
+
+  private createMessage(content: string): Message {
+    const maxId = this.messages.reduce((acc, msg) => Math.max(acc, msg.id), 0);
+    return {
+      id: maxId + 1,
+      content,
+      created_at: new Date().toISOString()
+    };
   }
 }
